@@ -1,8 +1,10 @@
-use std::{fs, io::Write };
+use std::fs::{File, OpenOptions};
+use std::io::Write;
 use std::str::FromStr;
 use chrono::Local;
 use colored::*;
 
+/// Enum representing the type of message to be logged or printed.
 pub enum PALMessageType {
     Success,
     Error,
@@ -26,16 +28,19 @@ impl PALMessageType {
 }
 pub struct PrintAndLog {
     log_to_file: bool,
-    log_file: String,
+    log_file_handle: Option<File>,
+    log_file_path: String,
     max_file_size: u32, //in bytes, so maximum of 4294.9 MB
     timestamp_format: String,
 }
 
 impl PrintAndLog {
+    /// Create a new instance of PrintAndLog with default settings.
     pub fn new() -> Self {
         PrintAndLog {
             log_to_file: true,
-            log_file: String::from_str("application.log").unwrap(),
+            log_file_handle: None,
+            log_file_path: String::from("application.log"),
             max_file_size: 10000000, //10 MB
             timestamp_format: String::from_str("%d.%m.%Y %H:%M:%S").unwrap(), // https://docs.rs/chrono/latest/chrono/format/strftime/index.html
         }
@@ -54,7 +59,7 @@ impl PrintAndLog {
         let file_name_str = file_name.into();
         
         if self.is_valid_filename(&file_name_str) {
-            self.log_file = file_name_str;
+            self.log_file_path = file_name_str;
             Ok(())
         }
         else {
@@ -63,7 +68,7 @@ impl PrintAndLog {
     }
 
     pub fn get_log_file_name (&self) -> String {
-        return self.log_file.clone();
+        return self.log_file_path.clone();
     }
 
     pub fn set_max_file_size (&mut self, new_file_size_in_bytes: u32) -> Result<(), &'static str> {
@@ -73,7 +78,7 @@ impl PrintAndLog {
             Ok(())
         }
         else {
-            Err("File size cannot be 0")
+            Err("File size cannot be 0.")
         }
     }
 
@@ -110,6 +115,27 @@ impl PrintAndLog {
         !file_name.is_empty() && file_name.chars().all(|c| c.is_alphanumeric() || c == '.' || c == '_' || c == '-')
     }
 
+    fn open_log_file(&mut self) -> Result<(), &'static str> {
+        match OpenOptions::new().create(true).write(true).append(true).open(&self.log_file_path) {
+            Ok(file) => {
+                self.log_file_handle = Some(file);
+                Ok(())
+            }
+            Err(_) => Err("Unable to create log file"),           
+        }
+    }
+
+    fn rotate_log_file(&mut self) -> Result<(), &'static str> {
+        let new_log_file_path = format!("{}.{}", self.get_log_timestamp(), &self.log_file_path);
+
+        if let Err(_) = std::fs::rename(&self.log_file_path,new_log_file_path) {
+            return Err("Can't rename the log file.");
+        }
+
+        self.log_file_handle = None;
+        return self.open_log_file();
+    }
+
     //Main public functions
     pub fn print <T: Into<String>, U:Into<String>> (&self,message_title: T, message: U, message_type: &PALMessageType) {
         
@@ -133,7 +159,7 @@ impl PrintAndLog {
         }
     }
 
-    pub fn log <T: Into<String>, U:Into<String>> (&self, message_title: T, message: U, message_type: &PALMessageType) {
+    pub fn log <T: Into<String>, U:Into<String>> (&mut self, message_title: T, message: U, message_type: &PALMessageType) {
         if self.log_to_file {
 
             let formatted_message = format!(
@@ -144,47 +170,32 @@ impl PrintAndLog {
                 message.into()
             );
 
-            let mut file = match fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&self.log_file)
-                {
-                    Ok(file) => file,
-                    Err(e) => {
-                        self.print("Error",&format!("Unable to open log file: {}",e),&PALMessageType::Error);
-                        return;
-                    }
-                };
-
-            let metadata = match file.metadata() {
-                Ok(metadata) => metadata,
-                Err(e) => {
-                    self.print(
-                        "Error",&format!("Unable to metadata of the log file: {}",e),&PALMessageType::Error);
+            if self.log_file_handle.is_none() {
+                if let Err(e) = self.open_log_file() {
+                    self.print("Error", format!("Cannot open the file:{}",e), &PALMessageType::Error);
                     return;
                 }
-            };
-
-            if metadata.len() > self.max_file_size.into() {
-                let new_log_file = format!("{}.{}",self.get_log_timestamp(),&self.log_file);
-
-                if let Err(e) = fs::rename(&self.log_file, new_log_file) {
-                    self.print("Error", &format!("Unable to rename log file: {}", e), &PALMessageType::Error);
-                    return;
-                }
-
-                file = match fs::File::create(&self.log_file) {
-                    Ok(new_file) => new_file,
-                    Err(e) => {
-                        self.print("Error", &format!("Unable to create new log file: {}", e), &PALMessageType::Error);
-                        return;
-                    }
-                }
-
             }
 
-            match file.write_all(formatted_message.as_bytes()) {
-                Ok(()) => (),
+            if let Some(ref mut file) = self.log_file_handle {
+                let should_rotate = if let Ok(metadata) = file.metadata() {
+                    metadata.len() > self.max_file_size.into()
+                }
+                else {
+                    false
+                };
+
+                if should_rotate {
+                    if let Err(e) = self.rotate_log_file() {
+                        self.print("Error",e,&PALMessageType::Error);
+                        return;
+                    }
+                }
+            }
+
+
+            match self.log_file_handle.as_ref().expect("Can't write to file.").write_all(formatted_message.as_bytes()) {
+                Ok(())=> (),
                 Err(e) => {
                     self.print("Error", &format!("Unable to write into log file: {}", e), &PALMessageType::Error);
                     return;
@@ -193,11 +204,21 @@ impl PrintAndLog {
         }
     }
 
-    pub fn print_and_log <T: Into<String>, U:Into<String>> (&self,message_title: T, message: U, message_type: &PALMessageType) {
+    pub fn print_and_log <T: Into<String>, U:Into<String>> (&mut self,message_title: T, message: U, message_type: &PALMessageType) {
         let title_str = message_title.into();
         let message_str = message.into();
         
         self.print(&title_str, &message_str, message_type);
         self.log(&title_str, &message_str, message_type);
+    }
+}
+
+impl Drop for PrintAndLog {
+    fn drop (&mut self) {
+        if let Some(ref mut file) = self.log_file_handle {
+            if let Err(e) = file.flush() {
+                self.print("Error",format!("Can't flush log file: {}",e),&PALMessageType::Error);
+            }
+        }
     }
 }

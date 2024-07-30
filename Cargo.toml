@@ -1,6 +1,6 @@
 [package]
 name = "print_and_log"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["FaultierSP <faultiersp@decreation.org>"]
 edition = "2021"
 description = "A crate for printing and logging messages with timestamps."
