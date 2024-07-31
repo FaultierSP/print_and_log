@@ -1,12 +1,11 @@
 [package]
 name = "print_and_log"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["FaultierSP <faultiersp@decreation.org>"]
 edition = "2021"
 description = "A crate for printing and logging messages with timestamps."
 license = "MIT"
 repository = "https://github.com/FaultierSP/print_and_log"
-
 
 [dependencies]
 chrono = "0.4.38"

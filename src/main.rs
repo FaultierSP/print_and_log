@@ -38,4 +38,11 @@ fn main() {
 
     //Printing and logging
     pal.print_and_log("You can see me","On your screen and in your files, if the logging is turned on.",&PALMessageType::Info);
+
+    //Borrowing with & to avoid moving the value
+    let title: String = String::from("Title 1");
+    let message: String = String::from("Message 1");
+    
+    pal.print(&title,&message,&PALMessageType::Info);
+    pal.print(title,message,&PALMessageType::Info);
 }

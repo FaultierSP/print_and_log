@@ -137,10 +137,9 @@ impl PrintAndLog {
     }
 
     //Main public functions
-    pub fn print <T: Into<String>, U:Into<String>> (&self,message_title: T, message: U, message_type: &PALMessageType) {
-        
-        let message_title: String = message_title.into();
-        let message: String = message.into();
+    pub fn print <T: AsRef<str>, U:AsRef<str>> (&self,message_title: T, message: U, message_type: &PALMessageType) {
+        let message_title: &str = message_title.as_ref();
+        let message: &str = message.as_ref();
 
         if message_title.is_empty() {
             println!("[ {} ] {}",self.get_timestamp(),message);
@@ -159,15 +158,18 @@ impl PrintAndLog {
         }
     }
 
-    pub fn log <T: Into<String>, U:Into<String>> (&mut self, message_title: T, message: U, message_type: &PALMessageType) {
+    pub fn log <T: AsRef<str>, U:AsRef<str>> (&mut self, message_title: T, message: U, message_type: &PALMessageType) {
+        let message_title: &str = message_title.as_ref();
+        let message: &str = message.as_ref();
+
         if self.log_to_file {
 
             let formatted_message = format!(
                 "{} {} {}: {}\n",
                 self.get_log_timestamp(),
                 message_type.as_str(),
-                message_title.into(),
-                message.into()
+                message_title,
+                message
             );
 
             if self.log_file_handle.is_none() {
@@ -204,9 +206,9 @@ impl PrintAndLog {
         }
     }
 
-    pub fn print_and_log <T: Into<String>, U:Into<String>> (&mut self,message_title: T, message: U, message_type: &PALMessageType) {
-        let title_str = message_title.into();
-        let message_str = message.into();
+    pub fn print_and_log <T: AsRef<str>, U:AsRef<str>> (&mut self,message_title: T, message: U, message_type: &PALMessageType) {
+        let title_str = message_title.as_ref();
+        let message_str = message.as_ref();
         
         self.print(&title_str, &message_str, message_type);
         self.log(&title_str, &message_str, message_type);
